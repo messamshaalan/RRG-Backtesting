@@ -4,6 +4,8 @@ Edit this file to change the universe, benchmark, and RRG parameters.
 """
 from __future__ import annotations
 
+import datetime as _dt
+
 # ── Universe ─────────────────────────────────────────────────────────────────
 BENCHMARK = "SPY"
 
@@ -38,7 +40,7 @@ SECTOR_NAMES: dict[str, str] = {
 
 # ── Data ─────────────────────────────────────────────────────────────────────
 START_DATE = "2015-01-01"
-END_DATE   = "2024-12-31"
+END_DATE   = _dt.date.today().strftime("%Y-%m-%d")
 PRICE_COL  = "Close"
 
 # ── Per-Timeframe RRG Parameters ─────────────────────────────────────────────
