@@ -160,18 +160,21 @@ def run(
                 "value": round(proceeds, 2),
             })
 
-        # Buy new positions at next bar price (equal-weight on total target)
+        # Buy new positions at next bar price (weighted by strategy.get_weights)
         to_buy = [s for s in target_syms if s not in holdings]
         if to_buy and target_syms:
-            alloc_per_sym = cash / len(target_syms)
+            weights  = strategy.get_weights(target_syms, current_row_ratio, current_row_mom)
+            buy_wsum = sum(weights.get(s, 1.0 / len(target_syms)) for s in to_buy) or 1.0
             for sym in to_buy:
                 price = _exec_price(sym)
                 if np.isnan(price) or price <= 0:
                     continue
+                w              = weights.get(sym, 1.0 / len(target_syms))
+                alloc          = cash * (w / buy_wsum)
                 cost_per_share = price * (1 + commission_pct)
-                shares = alloc_per_sym / cost_per_share
-                holdings[sym] = shares
-                cash -= shares * cost_per_share
+                shares         = alloc / cost_per_share
+                holdings[sym]  = shares
+                cash          -= shares * cost_per_share
                 trade_records.append({
                     "date": date, "symbol": sym, "action": "BUY",
                     "shares": round(shares, 6), "price": price,

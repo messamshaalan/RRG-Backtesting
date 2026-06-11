@@ -1,8 +1,8 @@
 """
-Quadrant entry study: compares returns when buying at Leading, Improving, or Lagging.
+Quadrant entry study: runs all entry strategies and compares equity curves.
 
-run_study() returns a dict keyed by (timeframe, entry_quadrant) with backtest
-results so the dashboard can overlay all three equity curves and compare stats.
+run_study() returns a dict keyed by (timeframe, strategy_label) with backtest
+results so the dashboard can overlay all equity curves and compare stats.
 """
 from __future__ import annotations
 
@@ -15,14 +15,10 @@ from rrg.quadrant import Quadrant
 from strategy.base import BaseStrategy
 
 
-# ── Entry strategies ──────────────────────────────────────────────────────────
+# ── Original single-quadrant strategies ──────────────────────────────────────
 
 class _QuadrantEntryStrategy(BaseStrategy):
-    """
-    Generic single-quadrant entry strategy.
-    Buys the top-N symbols in `target_quadrant` ranked by RS-Ratio.
-    Exits when a holding leaves that quadrant.
-    """
+    """Generic single-quadrant entry: buy top-N by RS-Ratio, exit when leaving."""
 
     def __init__(self, target_quadrant: str, max_positions: int = config.MAX_POSITIONS):
         self.target_quadrant = target_quadrant
@@ -40,46 +36,57 @@ class _QuadrantEntryStrategy(BaseStrategy):
         eligible = quadrants[quadrants == self.target_quadrant]
         if eligible.empty:
             return []
-        ranked = rs_ratio[eligible.index].nlargest(self.max_positions)
-        return ranked.index.tolist()
+        return rs_ratio[eligible.index].nlargest(self.max_positions).index.tolist()
 
 
 class LeadingEntryStrategy(_QuadrantEntryStrategy):
-    """Buy top-N symbols in the Leading quadrant."""
     def __init__(self, max_positions: int = config.MAX_POSITIONS):
         super().__init__(Quadrant.LEADING, max_positions)
 
 
 class ImprovingEntryStrategy(_QuadrantEntryStrategy):
-    """Buy top-N symbols in the Improving quadrant (early rotation)."""
     def __init__(self, max_positions: int = config.MAX_POSITIONS):
         super().__init__(Quadrant.IMPROVING, max_positions)
 
 
 class LaggingEntryStrategy(_QuadrantEntryStrategy):
-    """Buy top-N symbols in the Lagging quadrant (contrarian / mean-reversion)."""
     def __init__(self, max_positions: int = config.MAX_POSITIONS):
         super().__init__(Quadrant.LAGGING, max_positions)
 
 
 class WeakeningEntryStrategy(_QuadrantEntryStrategy):
-    """Buy top-N symbols in the Weakening quadrant."""
     def __init__(self, max_positions: int = config.MAX_POSITIONS):
         super().__init__(Quadrant.WEAKENING, max_positions)
 
 
-ENTRY_STRATEGIES: dict[str, type[_QuadrantEntryStrategy]] = {
-    "Leading":   LeadingEntryStrategy,
-    "Improving": ImprovingEntryStrategy,
-    "Weakening": WeakeningEntryStrategy,
-    "Lagging":   LaggingEntryStrategy,
-}
+# ── Strategy factory ──────────────────────────────────────────────────────────
+
+def _make_strategies(benchmark: pd.Series) -> dict[str, BaseStrategy]:
+    """Instantiate all strategies for a given run. benchmark needed for RegimeFilter."""
+    from strategy.examples import (
+        EarlyRotationStrategy,
+        RegimeFilteredStrategy,
+        ConfirmationStrategy,
+        ScoreWeightedStrategy,
+        MomentumAccelerationStrategy,
+    )
+    return {
+        "Leading":        LeadingEntryStrategy(),
+        "Improving":      ImprovingEntryStrategy(),
+        "Weakening":      WeakeningEntryStrategy(),
+        "Lagging":        LaggingEntryStrategy(),
+        "Early Rotation": EarlyRotationStrategy(),
+        "Regime Filter":  RegimeFilteredStrategy(benchmark),
+        "Confirmation":   ConfirmationStrategy(),
+        "Score Weighted": ScoreWeightedStrategy(),
+        "Mom. Accel.":    MomentumAccelerationStrategy(),
+    }
 
 
 # ── Study runner ──────────────────────────────────────────────────────────────
 
-StudyKey   = tuple[str, str]   # (timeframe, entry_label)
-StudyResult = dict             # engine output dict + "summary" key
+StudyKey    = tuple[str, str]   # (timeframe, strategy_label)
+StudyResult = dict              # engine output dict + "summary" key
 
 
 def run_study(
@@ -88,7 +95,7 @@ def run_study(
     precomputed: dict[str, tuple] | None = None,
 ) -> dict[StudyKey, StudyResult]:
     """
-    Run all four entry strategies across all requested timeframes.
+    Run all strategies across all requested timeframes.
 
     precomputed: optional {tf: (universe, benchmark, rs_ratio, rs_momentum, quadrants_df)}
       If supplied for a timeframe, skips data loading and RRG computation entirely.
@@ -114,21 +121,20 @@ def run_study(
 
         tf_cfg     = config.TIMEFRAMES[tf]
         rebal_freq = tf_cfg["rebalance_freq"]
+        strategies = _make_strategies(benchmark)
 
-        for label, StratCls in ENTRY_STRATEGIES.items():
-            print(f"   Running {label} entry strategy...")
-            strategy = StratCls()
-            result   = run(
+        for label, strategy in strategies.items():
+            print(f"   Running {label}…")
+            result = run(
                 universe, benchmark, strategy,
                 rebalance_freq=rebal_freq,
                 timeframe=tf,
                 _precomputed_rrg=rrg_tuple,
             )
-            num_trades = len(result["trades"])
             result["summary"] = performance_summary(
                 result["equity"],
                 benchmark=benchmark,
-                num_trades=num_trades,
+                num_trades=len(result["trades"]),
             )
             results[(tf, label)] = result
 
@@ -136,14 +142,10 @@ def run_study(
 
 
 def summary_table(study: dict[StudyKey, StudyResult]) -> pd.DataFrame:
-    """
-    Pivot the study results into a DataFrame:
-    rows = (timeframe, entry), columns = metric names.
-    """
+    """Pivot study results into rows=(timeframe, strategy), cols=metrics."""
     rows = []
     for (tf, label), res in study.items():
         row = {"Timeframe": config.TIMEFRAMES[tf]["label"], "Entry": label}
         row.update(res["summary"].to_dict())
         rows.append(row)
-    df = pd.DataFrame(rows).set_index(["Timeframe", "Entry"])
-    return df
+    return pd.DataFrame(rows).set_index(["Timeframe", "Entry"])

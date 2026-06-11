@@ -33,3 +33,15 @@ class BaseStrategy(ABC):
         current_positions: list[str],
     ) -> list[str]:
         ...
+
+    def get_weights(
+        self,
+        symbols: list[str],
+        rs_ratio: pd.Series,
+        rs_momentum: pd.Series,
+    ) -> dict[str, float]:
+        """Equal-weight by default. Override for score-based position sizing."""
+        if not symbols:
+            return {}
+        w = 1.0 / len(symbols)
+        return {s: w for s in symbols}

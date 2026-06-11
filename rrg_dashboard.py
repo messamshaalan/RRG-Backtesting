@@ -69,10 +69,17 @@ QUAD_ROW_BG = {
     Quadrant.LAGGING:   "#2d1515",
 }
 STRATEGY_COLORS = {
-    "Leading":   _C_LEAD,
-    "Improving": _C_IMPR,
-    "Weakening": _C_WEAK,
-    "Lagging":   _C_LAGG,
+    # Original quadrant-entry strategies
+    "Leading":        _C_LEAD,
+    "Improving":      _C_IMPR,
+    "Weakening":      _C_WEAK,
+    "Lagging":        _C_LAGG,
+    # Improved strategies
+    "Early Rotation": "#fd79a8",   # pink  — front-runs the Improving→Leading move
+    "Regime Filter":  "#00cec9",   # teal  — goes to cash in bear markets
+    "Confirmation":   "#a29bfe",   # lavender — 2-bar confirmation before entry
+    "Score Weighted": "#fdcb6e",   # gold  — position-sizes by RRG score
+    "Mom. Accel.":    "#e17055",   # coral — exits when RS-Momentum turns down
 }
 
 plt.rcParams.update({
@@ -293,7 +300,7 @@ class RRGDashboard:
                 rs_ratio, rs_momentum = compute_rrg(universe, benchmark, timeframe=tf)
                 quadrants = classify_frame(rs_ratio, rs_momentum)
 
-                self._set_status("Running backtests (4 strategies)…")
+                self._set_status("Running backtests (9 strategies)…")
                 precomp = {tf: (universe, benchmark, rs_ratio, rs_momentum, quadrants)}
                 study = run_study(timeframes=[tf], force_refresh=False, precomputed=precomp)
 
@@ -532,7 +539,7 @@ class RRGDashboard:
             ax_eq.plot(eq.index, eq.values, color=color, linewidth=2.2, label=label)
             ax_dd.fill_between(dd.index, dd.values, 0, color=color, alpha=0.28)
 
-        ax_eq.legend(loc="upper left", fontsize=9, framealpha=0.7)
+        ax_eq.legend(loc="upper left", fontsize=7, ncol=2, framealpha=0.7)
         self._bt_canvas.draw_idle()
 
         # Rebuild metrics table
