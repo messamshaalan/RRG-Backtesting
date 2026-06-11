@@ -184,6 +184,16 @@ class ScoreWeightedStrategy(BaseStrategy):
         return {s: v / total for s, v in shifted.items()}
 
 
+class BuyHoldStrategy(BaseStrategy):
+    """Single-symbol buy & hold. Buys once on first rebalance, never sells."""
+
+    def __init__(self, symbol: str):
+        self.symbol = symbol
+
+    def select(self, date, rs_ratio, rs_momentum, quadrants, prices, current_positions):
+        return [self.symbol]
+
+
 class MomentumAccelerationStrategy(BaseStrategy):
     """
     Leading quadrant only, but exits any sector where RS-Momentum is declining

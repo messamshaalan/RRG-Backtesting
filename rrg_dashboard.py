@@ -75,11 +75,21 @@ STRATEGY_COLORS = {
     "Weakening":      _C_WEAK,
     "Lagging":        _C_LAGG,
     # Improved strategies
-    "Early Rotation": "#fd79a8",   # pink  — front-runs the Improving→Leading move
-    "Regime Filter":  "#00cec9",   # teal  — goes to cash in bear markets
-    "Confirmation":   "#a29bfe",   # lavender — 2-bar confirmation before entry
-    "Score Weighted": "#fdcb6e",   # gold  — position-sizes by RRG score
-    "Mom. Accel.":    "#e17055",   # coral — exits when RS-Momentum turns down
+    "Early Rotation": "#fd79a8",
+    "Regime Filter":  "#00cec9",
+    "Confirmation":   "#a29bfe",
+    "Score Weighted": "#fdcb6e",
+    "Mom. Accel.":    "#e17055",
+}
+
+# Individual ETF buy & hold colors — tab20 palette, rendered as thin dashed lines
+_ETF_BH_PALETTE = [
+    "#4e79a7", "#f28e2b", "#e15759", "#76b7b2", "#59a14f",
+    "#edc948", "#b07aa1", "#ff9da7", "#9c755f", "#bab0ac", "#d37295",
+]
+ETF_BH_COLORS = {
+    f"B&H {sym}": _ETF_BH_PALETTE[i % len(_ETF_BH_PALETTE)]
+    for i, sym in enumerate(config.SYMBOLS)
 }
 
 plt.rcParams.update({
@@ -257,7 +267,7 @@ class RRGDashboard:
         self._nb.add(frame, text="  Backtest  ")
 
         self._bt_fig, axes = plt.subplots(
-            2, 1, figsize=(11, 5.8),
+            2, 1, figsize=(11, 7.0),
             gridspec_kw={"height_ratios": [3, 1]}, sharex=True,
         )
         self._bt_fig.subplots_adjust(left=0.08, right=0.97, top=0.93, bottom=0.08, hspace=0.05)
@@ -300,7 +310,7 @@ class RRGDashboard:
                 rs_ratio, rs_momentum = compute_rrg(universe, benchmark, timeframe=tf)
                 quadrants = classify_frame(rs_ratio, rs_momentum)
 
-                self._set_status("Running backtests (9 strategies)…")
+                self._set_status("Running backtests (9 strategies + 11 ETF buy & holds)…")
                 precomp = {tf: (universe, benchmark, rs_ratio, rs_momentum, quadrants)}
                 study = run_study(timeframes=[tf], force_refresh=False, precomputed=precomp)
 
@@ -533,13 +543,20 @@ class RRGDashboard:
         for (stf, label), res in self.study.items():
             if stf != tf:
                 continue
-            eq    = res["equity"]
-            dd    = eq / eq.cummax() - 1
-            color = STRATEGY_COLORS.get(label, _ACCENT)
-            ax_eq.plot(eq.index, eq.values, color=color, linewidth=2.2, label=label)
-            ax_dd.fill_between(dd.index, dd.values, 0, color=color, alpha=0.28)
+            eq  = res["equity"]
+            dd  = eq / eq.cummax() - 1
+            is_bh = label.startswith("B&H ")
+            color = ETF_BH_COLORS.get(label) if is_bh else STRATEGY_COLORS.get(label, _ACCENT)
+            if is_bh:
+                ax_eq.plot(eq.index, eq.values, color=color,
+                           linewidth=1.0, linestyle="--", alpha=0.55, label=label)
+                ax_dd.fill_between(dd.index, dd.values, 0, color=color, alpha=0.10)
+            else:
+                ax_eq.plot(eq.index, eq.values, color=color,
+                           linewidth=2.2, alpha=1.0, label=label)
+                ax_dd.fill_between(dd.index, dd.values, 0, color=color, alpha=0.25)
 
-        ax_eq.legend(loc="upper left", fontsize=7, ncol=2, framealpha=0.7)
+        ax_eq.legend(loc="upper left", fontsize=6.5, ncol=3, framealpha=0.75)
         self._bt_canvas.draw_idle()
 
         # Rebuild metrics table
@@ -554,15 +571,17 @@ class RRGDashboard:
                      relief="flat", padx=5, pady=3).grid(
                 row=0, column=j, padx=1, pady=1, sticky="ew")
 
-        for i, label in enumerate(STRATEGY_COLORS):
+        all_labels = list(STRATEGY_COLORS) + list(ETF_BH_COLORS)
+        for i, label in enumerate(all_labels):
             key = (tf, label)
             if key not in self.study:
                 continue
             s  = self.study[key]["summary"]
-            sc = STRATEGY_COLORS[label]
+            sc = ETF_BH_COLORS.get(label) if label.startswith("B&H ") \
+                 else STRATEGY_COLORS.get(label, _ACCENT)
 
-            def _v(key: str) -> str:
-                return str(s[key]) if key in s.index else "—"
+            def _v(k: str, _s=s) -> str:
+                return str(_s[k]) if k in _s.index else "—"
 
             vals = [label, _v("CAGR"), _v("Sharpe Ratio"),
                     _v("Max Drawdown"), _v("Ann. Volatility"), _v("Num Trades")]

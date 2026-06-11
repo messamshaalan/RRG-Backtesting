@@ -69,8 +69,9 @@ def _make_strategies(benchmark: pd.Series) -> dict[str, BaseStrategy]:
         ConfirmationStrategy,
         ScoreWeightedStrategy,
         MomentumAccelerationStrategy,
+        BuyHoldStrategy,
     )
-    return {
+    strategies: dict[str, BaseStrategy] = {
         "Leading":        LeadingEntryStrategy(),
         "Improving":      ImprovingEntryStrategy(),
         "Weakening":      WeakeningEntryStrategy(),
@@ -81,6 +82,10 @@ def _make_strategies(benchmark: pd.Series) -> dict[str, BaseStrategy]:
         "Score Weighted": ScoreWeightedStrategy(),
         "Mom. Accel.":    MomentumAccelerationStrategy(),
     }
+    # Individual ETF buy & holds — one per symbol in the universe
+    for sym in config.SYMBOLS:
+        strategies[f"B&H {sym}"] = BuyHoldStrategy(sym)
+    return strategies
 
 
 # ── Study runner ──────────────────────────────────────────────────────────────
